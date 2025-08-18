@@ -105,11 +105,6 @@ If you would like to contribute, please:
 - **Jacobo Sepulveda** — Initial work (author).  
   - GitHub: `https://github.com/Jaco0bo` *
 
-## License
-
-This project is licensed under the **MIT License**. See the [`LICENSE.md`](LICENSE.md) file for details.
-
-
 ## Acknowledgments
 
 - Hat tip to classic low-level networking examples and tutorials that explain sockets and HTTP basics.  
