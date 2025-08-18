@@ -119,7 +119,9 @@ http://localhost:36000/
 ```
 You should see a page and responses similar to the screenshots below.
 
-![Home / index view](screenshots/imagen1.png)
-![Echo GET example](screenshots/imagen2.png)
-![Echo POST example](screenshots/imagen3.png)
+![Home view](screenshots/Imagen1.png)
+
+![GET example](screenshots/Imagen2.png)
+
+![POST example](screenshots/Imagen3.png)
 
