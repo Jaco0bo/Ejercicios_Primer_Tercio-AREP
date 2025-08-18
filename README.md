@@ -113,4 +113,13 @@ If you would like to contribute, please:
 
 ## Demo
 
+If you followed the steps above and started the server then open your browser and go to:
+```
+http://localhost:36000/
+```
+You should see a page and responses similar to the screenshots below.
+
+![Home / index view](screenshots/imagen1.png)
+![Echo GET example](screenshots/imagen2.png)
+![Echo POST example](screenshots/imagen3.png)
 
