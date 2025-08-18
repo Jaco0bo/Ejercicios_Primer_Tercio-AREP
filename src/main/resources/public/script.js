@@ -8,7 +8,7 @@ document.getElementById('time').onclick = async () => {
 
 // POST: enviar mensaje al servidor
 document.getElementById('echo').onclick = async () => {
-    const msg = { message: "Hola servidor desde el cliente 3>" };
+    const msg = { message: "Hola servidor desde el cliente <3" };
 
     const r = await fetch('/api/echo', {
         method: 'POST',
