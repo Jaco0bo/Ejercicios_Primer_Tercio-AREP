@@ -1,4 +1,4 @@
-# Workshop on Designing and Structuring Distributed Internet Applications
+# Workshop on Designing and Structuring Distributed Internet Applications (WORK 1)
 
 This project is a minimal HTTP server implemented with raw **Java sockets**. It is meant as an academic exercise to understand how HTTP works under the hood, without using frameworks like Spring Boot or Spark.
 
