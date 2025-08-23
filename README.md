@@ -125,3 +125,41 @@ You should see a page and responses similar to the screenshots below.
 
 ![POST example](screenshots/Imagen3.png)
 
+
+# Project Statement: Web Framework Development for REST Services and Static File Management (WORK 2)
+
+## Objective: 
+
+This project aims to enhance an existing web server, which currently supports HTML files, JavaScript, CSS, and images, by converting it into a fully functional web framework. This framework will enable the development of web applications with backend REST services. The new framework will provide developers with tools to define REST services using lambda functions, manage query values within requests, and specify the location of static files.
+
+## Project Scope and Features:
+
+**1. GET Static Method for REST Services:**
+
+  - Implement a get() method that allows developers to define REST services using lambda functions.
+    
+  - Example Usage:
+    ```get("/hello", (req, res) -> "hello world!");```
+    
+  - This feature will enable developers to define simple and clear routes within their applications, mapping URLs to specific lambda expressions that handle the requests and responses.
+    
+**2. Query Value Extraction Mechanism:**
+
+- Develop a mechanism to extract query parameters from incoming requests and make them accessible within the REST services.
+  
+- Example Usage:
+  ```get("/hello", (req, res) -> "hello " + req.getValues("name"));```
+  
+- This functionality will facilitate the creation of dynamic and parameterized REST services, allowing developers to easily access and utilize query parameters within their service implementations.
+  
+**3. Static File Location Specification:**
+
+- Introduces to ```staticfiles()``` method that allows developers to define the folder where static files are located.
+  
+- Example Usage:
+  ```staticfiles("webroot/public");```
+  
+- The framework will then look for static files in the specified directory, such as target/classes/webroot/public, making it easier for developers to organize and manage their application's static resources.
+
+**4. Additional Tasks:**
+- Build an example demonstrating how applications would be developed on your server.
