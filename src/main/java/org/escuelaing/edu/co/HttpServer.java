@@ -1,26 +1,39 @@
 package org.escuelaing.edu.co;
 
 import java.io.*;
+import java.lang.reflect.Method;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import org.escuelaing.edu.co.annotations.*;
 
 public class HttpServer {
-    /**
-     * Dirección donde se almacena toda la página, imágenes. (recursos estáticos).
-     */
+
+    /** Static resources directory (relative to project root). */
     private static final File PUBLIC = new File("src/main/resources/public");
+    private static final Map<String, Method> routeHandlers = new HashMap<>();
+    private static Object controllerInstance = null;
 
     public static void main(String[] args) throws IOException {
+        if (args.length < 1) {
+            System.err.println("Usage: java -cp target/classes co.edu.escuelaing.reflexionlab.HttpServer <fully.qualified.ControllerClass>");
+            return;
+        }
+
+        String controllerClass = args[0];
+        loadRoutes(controllerClass);
+
         if (!PUBLIC.exists()) PUBLIC.mkdirs();
-        try (ServerSocket server = new ServerSocket(36000)) { // Socket del servidor
+
+        try (ServerSocket server = new ServerSocket(36000)) {
             System.out.println("Listening on http://localhost:36000/");
+            // This server is sequential (not concurrent) to satisfy "múltiples solicitudes no concurrentes"
             while (true) {
-                try (Socket client = server.accept()) { // Socket del cliente
-                    handle(client); // Aquí se maneja la conexión del cliente
+                try (Socket client = server.accept()) {
+                    handle(client);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -28,102 +41,140 @@ public class HttpServer {
         }
     }
 
-    private static void handle(Socket client) throws IOException {
-        client.setSoTimeout(5000);
-        InputStream is = client.getInputStream(); // Entrada del usuario (socket) al servidor
-        OutputStream os = client.getOutputStream(); // Salida del servidor (socketServer) al usuario
-        BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)); // Pasamos de bytes a char
-
-        String requestLine = br.readLine();
-        if (requestLine == null || requestLine.isEmpty()) return; // Si la petición está vacía o se cerro la conexión, se cierra la petición
-        String[] reqParts = requestLine.split(" "); // Separamos por espacios y se espera que este al menos METHOD Y PATH (METHOD PATH HTTP/VERSION)
-        if (reqParts.length < 2) return; //Si el mensaje no tiene como mínimo la cabecera (2) y algo adicional (1), se acaba el programa
-
-        String method = reqParts[0]; // GET, POST, PUT ..
-        String fullPath = reqParts[1]; // Ejemplo: index.html
-        String path = fullPath.split("\\?")[0];
-
-        Map<String,String> headers = new HashMap<>(); // Aquí empezamos a manejar los headers
-        String line;
-        while ((line = br.readLine()) != null && !line.isEmpty()) { // Si la línea no existe (no hay header) o está vacía (Fin del Header)
-            int idx = line.indexOf(':'); // Tomamos como index los ":" que separan nombre de valor
-            if (idx > 0) { // si idx existe procedemos a insertar los valores en nuestro HashMap (nombre, valor)
-                headers.put(line.substring(0, idx).trim().toLowerCase(), // Tomar Nombre
-                        line.substring(idx+1).trim()); // Tomar valor
+    private static void loadRoutes(String className) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            if (!clazz.isAnnotationPresent(RestController.class)) {
+                System.err.println("Class " + className + " is not annotated with @RestController");
+                return;
             }
-        }
+            controllerInstance = clazz.getDeclaredConstructor().newInstance();
 
-        // Manejo del endpoint /api/echo
-        if (path.equals("/api/echo")) {
-            String response;
-            int status = 200; // OK
-
-            if ("GET".equals(method)) {
-                if (fullPath.contains("?")) {
-                    String qs = fullPath.substring(fullPath.indexOf('?') + 1);
-                    Map<String,String> params = parseQuery(qs); // Parseamos con parseQuery
-                    response = toJson(params); // Se construye un JSON a partir de los String
-                } else {
-                    response = "{\"msg\":\"OK\"}";
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(GetMapping.class)) {
+                    GetMapping gm = method.getAnnotation(GetMapping.class);
+                    String path = gm.value();
+                    routeHandlers.put(path, method);
+                    System.out.println("Registered route: GET " + path + " -> " + method.getName());
                 }
-
-            } else if ("POST".equals(method) || "PUT".equals(method)) {
-                // Usamos BufferedReader para leer el body
-                String body = readBody(br, headers);
-                String ct = headers.getOrDefault("content-type", "").toLowerCase();
-
-                // Si no hay content-type se lanza error 400
-                if (ct.isEmpty()) {
-                    status = 400;
-                    response = "{\"error\":\"missing content-type\"}";
-                } else if (ct.contains("application/json")) {
-                    // Echo de JSON (si body vacío devolvemos un mensaje)
-                    response = body.isEmpty() ? "{\"msg\":\"empty\"}" : body;
-                } else if (ct.contains("application/x-www-form-urlencoded")) {
-                    // Parsear body como query params
-                    Map<String,String> params = parseQuery(body);
-                    response = toJson(params);
-                } else {
-                    // Otros content-types: devolvemos body como string
-                    response = "{\"msg\":\"ok\",\"body\":\"" + escapeJson(body) + "\"}";
-                }
-
-            } else {
-                status = 405; // Method Not Allowed
-                response = "{\"error\":\"method not supported\"}";
             }
-            sendText(os, status, "application/json; charset=utf-8", response);
-            return;
+        } catch (Exception e) {
+            System.err.println("Error loading controller " + className);
+            e.printStackTrace();
         }
+    }
 
-        // Manejo del endpoint /api/time
-        if ("/api/time".equals(path)) {
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy HH:mm:ss", new Locale("es", "ES"));
-            String time = now.format(formatter);
+    private static void handle(Socket client) {
+        try {
+            client.setSoTimeout(5000);
+            InputStream is = client.getInputStream();
+            OutputStream os = client.getOutputStream();
+            BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
 
-            String response = "{\"Fecha\":\"" + escapeJson(time) + "\"}";
-            sendText(os, 200, "application/json; charset=utf-8", response);
-            return;
+            String requestLine = br.readLine();
+            if (requestLine == null || requestLine.isEmpty()) return;
+
+            String[] reqParts = requestLine.split(" ");
+            if (reqParts.length < 2) return;
+
+            String method = reqParts[0];
+            String fullPath = reqParts[1];
+            String path = fullPath.split("\\?")[0];
+
+            // Read headers
+            Map<String,String> headers = new HashMap<>();
+            String line;
+            while ((line = br.readLine()) != null && !line.isEmpty()) {
+                int idx = line.indexOf(':');
+                if (idx > 0) {
+                    headers.put(line.substring(0, idx).trim().toLowerCase(),
+                            line.substring(idx + 1).trim());
+                }
+            }
+
+            // If controller route matches and it's a GET, serve via reflection
+            if ("GET".equalsIgnoreCase(method) && routeHandlers.containsKey(path)) {
+                Method m = routeHandlers.get(path);
+                try {
+                    // Only support String return type for now
+                    if (!m.getReturnType().equals(String.class)) {
+                        sendText(os, 500, "text/plain; charset=utf-8", "Handler must return String");
+                        return;
+                    }
+                    String response = (String) m.invoke(controllerInstance);
+                    sendText(os, 200, "text/html; charset=utf-8", response);
+                    return;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    sendText(os, 500, "text/plain; charset=utf-8", "Internal Server Error");
+                    return;
+                }
+            }
+
+            // Built-in endpoints
+            if (path.equals("/api/echo")) {
+                String response;
+                int status = 200;
+                if ("GET".equalsIgnoreCase(method)) {
+                    if (fullPath.contains("?")) {
+                        String qs = fullPath.substring(fullPath.indexOf('?') + 1);
+                        Map<String,String> params = parseQuery(qs);
+                        response = toJson(params);
+                    } else {
+                        response = "{\"msg\":\"OK\"}";
+                    }
+                } else if ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method)) {
+                    String body = readBody(br, headers);
+                    String ct = headers.getOrDefault("content-type", "").toLowerCase();
+                    if (ct.isEmpty()) {
+                        status = 400;
+                        response = "{\"error\":\"missing content-type\"}";
+                    } else if (ct.contains("application/json")) {
+                        response = body.isEmpty() ? "{\"msg\":\"empty\"}" : body;
+                    } else if (ct.contains("application/x-www-form-urlencoded")) {
+                        Map<String,String> params = parseQuery(body);
+                        response = toJson(params);
+                    } else {
+                        response = "{\"msg\":\"ok\",\"body\":\"" + escapeJson(body) + "\"}";
+                    }
+                } else {
+                    status = 405;
+                    response = "{\"error\":\"method not supported\"}";
+                }
+                sendText(os, status, "application/json; charset=utf-8", response);
+                return;
+            }
+
+            if ("/api/time".equals(path)) {
+                LocalDateTime now = LocalDateTime.now();
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy HH:mm:ss", new Locale("es", "ES"));
+                String time = now.format(formatter);
+                String response = "{\"Fecha\":\"" + escapeJson(time) + "\"}";
+                sendText(os, 200, "application/json; charset=utf-8", response);
+                return;
+            }
+
+            // Static file serving
+            if ("/".equals(path)) path = "/index.html";
+            File file = new File(PUBLIC, path);
+            String base = PUBLIC.getCanonicalPath();
+            String candidate = file.getCanonicalPath();
+            if (!candidate.startsWith(base + File.separator) && !candidate.equals(base)) {
+                sendText(os, 403, "text/plain; charset=utf-8", "Forbidden");
+                return;
+            }
+            if (!file.exists() || file.isDirectory()) {
+                sendText(os, 404, "text/html; charset=utf-8", "<h1>404 Not Found</h1>");
+                return;
+            }
+            byte[] data = Files.readAllBytes(file.toPath());
+            String ct = contentType(file.getName());
+            sendBytes(os, 200, ct, data);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            try { client.close(); } catch (IOException ignored) {}
         }
-
-        // Manejo del archivo html desde el disco local
-        if ("/".equals(path)) path = "/index.html";
-        File file = new File(PUBLIC, path);
-
-        String base = PUBLIC.getCanonicalPath(); // Ruta absoluta a la carpeta public
-        String candidate = file.getCanonicalPath(); // Ruta absoluta al archivo index.html
-        if (!candidate.startsWith(base + File.separator) && !candidate.equals(base)) { // Revisamos que no se intente hacer directory traversal
-            sendText(os, 403, "text/plain; charset=utf-8", "Forbidden");
-            return;
-        }
-        if (!file.exists() || file.isDirectory()) {
-            sendText(os, 404, "text/html; charset=utf-8", "<h1>404 Not Found</h1>");
-            return;
-        }
-        byte[] data = Files.readAllBytes(file.toPath()); // Leemos el archivo
-        String ct = contentType(file.getName()); // Detectamos de qué tipo es html, css, jpg ...
-        sendBytes(os, 200, ct, data); // Lo enviamos como respuesta al navegador
     }
 
 
@@ -314,5 +365,6 @@ public class HttpServer {
         }
         return sb.toString();
     }
+
 }
 
