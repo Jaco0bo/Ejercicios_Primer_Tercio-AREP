@@ -1,10 +1,18 @@
-# Workshop on Designing and Structuring Distributed Internet Applications
+# Web Framework Development for REST Services and Static File Management
 
-This project is a minimal HTTP server implemented with raw **Java sockets**. It is meant as an academic exercise to understand how HTTP works under the hood, without using frameworks like Spring Boot or Spark.
+This repository contains a minimal Java web framework built on top of raw Java Socket I/O.
+It began as a socket-based HTTP server for learning purposes and was extended into a small framework that supports:
+
+- registering REST handlers with ```get(...)``` using lambdas.
+
+- extracting query parameters from requests
+
+- serving static files from a configurable folder.
 
 ## Getting Started
 
 Before you run this project, make sure you have the following installed:
+
 ### Prerequisites
 
 - **Java JDK 8+**  
@@ -89,6 +97,127 @@ This project was built with the following tools and libraries:
 
 ---
 
+## Demo
+
+```bash
+# GET with query parameter
+curl -i 'http://localhost:36000/App/hello?name=Pedro'
+
+# GET returning a numeric (or plain) value
+curl -i 'http://localhost:36000/App/pi'
+
+# POST echo example (form-urlencoded)
+curl -i -X POST -H "Content-Type: application/x-www-form-urlencoded" -d 'a=1&b=2' 'http://localhost:36000/api/echo'
+
+# Static file (index)
+curl -i 'http://localhost:36000/index.html'
+
+# 404 / Not found
+curl -i 'http://localhost:36000/nonexistent'
+
+# Directory traversal attempt (should be blocked)
+curl -i 'http://localhost:36000/../pom.xml'
+```
+
+![example1](screenshots/example1.png)
+
+![example2](screenshots/example2.png)
+
+![example3](screenshots/example3.png)
+
+
+if you are using Windows put curl.exe to avoid the ```Invoque-WebRequest```
+
+## Architecture & main components
+
+### This framework is intentionally small and composed of a few focused classes:
+
+- ```HttpServer```
+
+  - Entry point and request loop (synchronous model).
+
+  - Instantiates a single ```Router```, registers routes and static folder, accepts sockets and delegates handling.
+
+- ```RequestParser```
+
+  - Parses raw HTTP request lines, headers and body into a ```Request``` object.
+
+  - Respects ```Content-Length``` and decodes query string into a ```Map<String,String>```.
+
+- ```Request```
+
+  - POJO representing the incoming request: ```method```, ```path```, ```fullPath```, ```queryParams```, ```headers```, ```body (byte[])```.
+
+  - Helpers: ```getQueryParam(name, default)```, ```bodyAsString()```, etc.
+
+- ```Response```
+
+  - Wrapper over the socket ```OutputStream```. Helpers include: ```status(int)```, ```header(String,String)```, ```send(String|byte[])```,   ```sendError(int,String)```, ```isSent()```
+
+  - Responsible for formatting the HTTP response (status line, headers, Content-Length, body) and flushing.
+
+- ```Router```
+
+  - Stores routes keyed by ```METHOD:normalizedPath``` (e.g. ```GET:/App/hello```).
+
+  - Registration helpers: ```get(path, handler)```, ```post(path, handler)```, ```put(...)```, ```delete(...)```.
+
+  - ```staticFiles(directory)``` sets the static root.
+
+  - ```handle(Request, Response)``` dispatches to handler, falls back to static files if configured, otherwise returns 404.
+
+## How to register routes & static folder
+
+Register routes once at server startup (before the accept loop):
+
+```java
+Router router = new Router();
+router.staticFiles("src/main/resources/public");
+
+// Register GET handlers
+router.get("/App/hello", (req, res) -> "Hello " + req.getQueryParam("name", "world"));
+router.get("/App/pi", (req, res) -> String.valueOf(Math.PI));
+
+// Register POST handler
+router.post("/api/echo", (req, res) -> req.bodyAsString());
+```
+
+**Handler contract**
+
+- Handlers are ```BiFunction<Request, Response, Object>```. They receive ```req``` and ```res``` and can:
+
+  - Return a ```String``` or ```byte[]``` (if the handler returns a value and ```res.isSent()``` is false, the server will convert and send it)
+
+  - Write directly to the response using ```res.header(...)``` and ```res.send(...)``` for full control (in this case the router will not send an extra body).
+
+**Static files**
+
+- Call ```router.staticFiles("path/to/webroot")``` to set the directory used for static file serving.
+
+- If a route is not found, the router will attempt to serve a file from that folder (with directory-traversal protection).
+
+## How requests are handled (flow)
+
+1. ```HttpServer``` accepts a socket connection.
+
+2. ```RequestParser.parse(socket, timeout)``` parses request-line, headers and body → returns ```Request```.
+
+3. ```HttpServer``` creates ```Response``` wrapping the socket ```OutputStream```.
+
+4. ```HttpServer``` calls ```router.handle(request, response)```.
+
+5. ```Router:```
+
+- looks up ```METHOD:normalizedPath```,
+
+- if a handler exists, invokes it
+
+- else tries to serve a static file (if configured)
+
+- else sends 404.
+
+6. If handler returned an ```Object``` and ```res.isSent()``` is false, ```HttpServer``` or the router will convert the result (```String``` → ```text/plain```, ```byte[]``` → raw body) and send it.
+
 ## Contributing
 
 If you would like to contribute, please:
@@ -100,17 +229,11 @@ If you would like to contribute, please:
 5. Push to the branch: `git push origin feature/my-change`
 6. Open a Pull Request describing the change and why it is useful.
 
-## Authors
+## Authors and Acknowledgments
 
 - **Jacobo Sepulveda** — Initial work (author).  
-  - GitHub: `https://github.com/Jaco0bo` *
+  - GitHub: `https://github.com/Jaco0bo`
 
-## Acknowledgments
-
-- Hat tip to classic low-level networking examples and tutorials that explain sockets and HTTP basics.  
-- Inspiration: articles and books on TCP/IP and HTTP internals.  
-- Thank you to the teacher for the questions resolved in class and a lot of internet web pages and IA help.
-
-## Demo
-
-
+Acknowledgments:
+- Networking and HTTP internals tutorials and reference materials.
+- Course and teacher guidance used to shape this exercise.
