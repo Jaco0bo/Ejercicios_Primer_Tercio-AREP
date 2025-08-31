@@ -161,5 +161,46 @@ This project aims to enhance an existing web server, which currently supports HT
   
 - The framework will then look for static files in the specified directory, such as target/classes/webroot/public, making it easier for developers to organize and manage their application's static resources.
 
-**4. Additional Tasks:**
-- Build an example demonstrating how applications would be developed on your server.
+## Changes made in the `add: Work in class` commit (reflexion-lab3 branch)
+
+- Methods and examples have been added for testing the Java reflection API within the server.
+- Classes and objects can now be inspected and manipulated at runtime (e.g., getting methods and fields of a class, invoking methods, modifying private attributes).
+- The server includes endpoints and examples for interacting with these features.
+
+### Testing the new features
+
+1. **Class inspection via endpoint**
+```bash
+curl -i 'http://localhost:36000/reflection/class?name=java.lang.String'
+```
+> Returns information about the methods and attributes of the `String` class.
+
+2. **Dynamic Method Invocation**
+```bash
+curl -i 'http://localhost:36000/reflection/invoke?class=java.lang.Math&method=abs&value=-5'
+```
+> Returns the result of invoking the `abs` method of the `Math` class with the -5 parameter.
+
+3. **Accessing and Modifying Private Attributes**
+```bash
+curl -i 'http://localhost:36000/reflection/field?class=my.package.MyClass&field=private'
+```
+> Displays the value of the `private` attribute of the specified class (you must have an example class in your project).
+
+4. **REST Route Registration with Reflection**
+```java
+router.get("/reflexion/hello", (req, res) -> {
+Class<?> clazz = Class.forName("java.lang.String");
+return "Class found: " + clazz.getName();
+});
+```
+> You can test this endpoint with:
+```bash
+curl -i 'http://localhost:36000/reflexion/hello'
+```
+
+These tests allow you to verify the functionality of the built-in reflection API and how the server responds dynamically using reflection.
+
+### Example:
+
+![reflexion](screenshots/lab3.png )
