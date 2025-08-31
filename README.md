@@ -218,6 +218,101 @@ router.post("/api/echo", (req, res) -> req.bodyAsString());
 
 6. If handler returned an ```Object``` and ```res.isSent()``` is false, ```HttpServer``` or the router will convert the result (```String``` → ```text/plain```, ```byte[]``` → raw body) and send it.
 
+## Recent Changes (Week 4)
+
+The latest commit (`add: code to week 4 work`) adds functionality for the week 4 reflection exercises, extending the framework's ability to work with reflections and improving the code structure.
+
+## Getting Started
+
+Make sure you have the following installed:
+
+### Prerequisites
+
+- **Java JDK 8+**
+Check with:
+```bash
+java -version
+```
+- **Maven 3.6+**
+Check with:
+```
+mvn -v
+```
+- Recommended IDE: IntelliJ IDEA.
+
+### Installation
+
+1. Clone the repository:
+```
+git clone https://github.com/Jaco0bo/Ejercicios_Primer_Tercio-AREP.git
+cd Ejercicios_Primer_Tercio-AREP
+```
+2. Compile the project:
+```
+mvn clean package
+```
+3. Run the server:
+```
+mvn exec:java -Dexec.mainClass="org.escuelaing.edu.co.HttpServer"
+```
+
+## Tests
+
+The project includes automated tests to verify the operation of the server and socket client.
+
+Test execution example (Java):
+```bash
+HttpServerTest.java
+```
+
+## Demo
+
+```bash
+# GET with query parameter
+curl -i 'http://localhost:36000/App/hello?name=Pedro'
+
+# GET that returns a numeric value
+curl -i 'http://localhost:36000/App/pi'
+
+# POST echo (form-urlencoded)
+curl -i -X ​​POST -H "Content-Type: application/x-www-form-urlencoded" -d 'a=1&b=2' 'http://localhost:36000/api/echo'
+
+# Static file
+curl -i 'http://localhost:36000/index.html'
+
+#404/Not found
+curl -i 'http://localhost:36000/nonexistent'
+
+# Attempted directory traversal (should be blocked)
+curl -i 'http://localhost:36000/../pom.xml'
+```
+
+If you're using Windows, run `curl.exe` to avoid using `Invoke-WebRequest`.
+
+## Architecture & Core Components
+
+The framework is composed of core classes such as:
+
+- `HttpServer`: Entry point and request loop.
+- `RequestParser`: Parses raw HTTP requests.
+- `Request`: Represents the HTTP request.
+- `Response`: Wraps the socket's OutputStream and helps format the response.
+- `Router`: Stores routes and manages static files.
+
+### Route Registration and Static Folder
+
+```java
+Router router = new Router();
+router.staticFiles("src/main/resources/public");
+
+// Register GET handlers
+router.get("/App/hello", (req, res) -> "Hello " + req.getQueryParam("name", "world"));
+router.get("/App/pi", (req, res) -> String.valueOf(Math.PI));
+
+// POST handler registration
+router.post("/api/echo", (req, res) -> req.bodyAsString());
+```
+
 ## Contributing
 
 If you would like to contribute, please:
