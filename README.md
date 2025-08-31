@@ -126,78 +126,36 @@ You should see a page and responses similar to the screenshots below.
 ![POST example](screenshots/Imagen3.png)
 
 
-# Project Statement: Web Framework Development for REST Services and Static File Management (WORK 2)
-
-## Objective: 
-
-This project aims to enhance an existing web server, which currently supports HTML files, JavaScript, CSS, and images, by converting it into a fully functional web framework. This framework will enable the development of web applications with backend REST services. The new framework will provide developers with tools to define REST services using lambda functions, manage query values within requests, and specify the location of static files.
-
-## Project Scope and Features:
-
-**1. GET Static Method for REST Services:**
-
-  - Implement a get() method that allows developers to define REST services using lambda functions.
-    
-  - Example Usage:
-    ```get("/hello", (req, res) -> "hello world!");```
-    
-  - This feature will enable developers to define simple and clear routes within their applications, mapping URLs to specific lambda expressions that handle the requests and responses.
-    
-**2. Query Value Extraction Mechanism:**
-
-- Develop a mechanism to extract query parameters from incoming requests and make them accessible within the REST services.
-  
-- Example Usage:
-  ```get("/hello", (req, res) -> "hello " + req.getValues("name"));```
-  
-- This functionality will facilitate the creation of dynamic and parameterized REST services, allowing developers to easily access and utilize query parameters within their service implementations.
-  
-**3. Static File Location Specification:**
-
-- Introduces to ```staticfiles()``` method that allows developers to define the folder where static files are located.
-  
-- Example Usage:
-  ```staticfiles("webroot/public");```
-  
-- The framework will then look for static files in the specified directory, such as target/classes/webroot/public, making it easier for developers to organize and manage their application's static resources.
-
 ## Changes made in the `add: Work in class` commit (reflexion-lab3 branch)
 
 - Methods and examples have been added for testing the Java reflection API within the server.
 - Classes and objects can now be inspected and manipulated at runtime (e.g., getting methods and fields of a class, invoking methods, modifying private attributes).
 - The server includes endpoints and examples for interacting with these features.
 
-### Testing the new features
+### How to test changes?
 
-1. **Class inspection via endpoint**
-```bash
-curl -i 'http://localhost:36000/reflection/class?name=java.lang.String'
-```
-> Returns information about the methods and attributes of the `String` class.
+From the project root, run the following command to start the server and register a controller via reflection:
 
-2. **Dynamic Method Invocation**
 ```bash
-curl -i 'http://localhost:36000/reflection/invoke?class=java.lang.Math&method=abs&value=-5'
+java -cp target\classes org.escuelaing.edu.co.HttpServer org.escuelaing.edu.co.annotations.HelloController
 ```
-> Returns the result of invoking the `abs` method of the `Math` class with the -5 parameter.
 
-3. **Accessing and Modifying Private Attributes**
-```bash
-curl -i 'http://localhost:36000/reflection/field?class=my.package.MyClass&field=private'
-```
-> Displays the value of the `private` attribute of the specified class (you must have an example class in your project).
+If the `HelloController` class has correctly annotated methods, the server will display the registered routes in the console, for example:
 
-4. **REST Route Registration with Reflection**
-```java
-router.get("/reflexion/hello", (req, res) -> {
-Class<?> clazz = Class.forName("java.lang.String");
-return "Class found: " + clazz.getName();
-});
 ```
-> You can test this endpoint with:
+Registered route: GET /other -> otherRoute
+Registered route: GET /greeting -> greeting
+Listening on http://localhost:36000/
+```
+
+Now you can test the endpoints in your browser or with `curl`:
+
 ```bash
-curl -i 'http://localhost:36000/reflexion/hello'
+curl -i http://localhost:36000/other
+curl -i http://localhost:36000/greeting
 ```
+
+This will confirm that the routes have been registered dynamically through reflection and the server responds correctly.
 
 These tests allow you to verify the functionality of the built-in reflection API and how the server responds dynamically using reflection.
 
