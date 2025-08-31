@@ -287,6 +287,18 @@ curl -i 'http://localhost:36000/nonexistent'
 curl -i 'http://localhost:36000/../pom.xml'
 ```
 
+### Example:
+
+![lab3-1](screenshots/lab3-1.png)
+
+![lab3](screenshots/lab3.png)
+
+![lab3-2](screenshots/lab3-2.png)
+
+![lab3-3](screenshots/lab3-3.png)
+
+![lab3-4](screenshots/lab3-4.png)
+
 If you're using Windows, run `curl.exe` to avoid using `Invoke-WebRequest`.
 
 ## Architecture & Core Components
