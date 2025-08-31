@@ -20,7 +20,6 @@ public class Request {
         this.body = body == null ? new byte[0] : body;
     }
 
-    // Getters and helpers
     public String getMethod() { return method; }
     public String getPath() { return path; }
 
