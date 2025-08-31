@@ -14,7 +14,7 @@ public class Router {
 
     public Router() {}
 
-    // ---- registration helpers ----
+
     public void get(String path, BiFunction<Request, Response, Object> handler) {
         put("GET", path, handler);
     }
@@ -57,7 +57,6 @@ public class Router {
         String rawPath = req.getPath() == null ? "/" : req.getPath();
         String path = normalize(rawPath);
 
-        // try route handler
         BiFunction<Request, Response, Object> handler = routes.get(key(method, path));
         if (handler != null) {
             try {
@@ -73,7 +72,6 @@ public class Router {
         // fallback: static files
         if (staticRoot != null) {
             try {
-                // decode URL encoded parts (eg. %20)
                 String decoded = URLDecoder.decode(path, StandardCharsets.UTF_8.name());
                 if ("/".equals(decoded)) decoded = "/index.html";
 
@@ -106,7 +104,6 @@ public class Router {
             }
         }
 
-        // nothing handled it -> 404
         if (!res.isSent()) {
             res.sendError(404, "Not Found");
         }

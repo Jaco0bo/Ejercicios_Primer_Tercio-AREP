@@ -3,6 +3,12 @@ package org.escuelaing.edu.co;
 import java.io.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.net.*;
 import org.escuelaing.edu.co.annotations.*;
 import java.text.ParseException;
@@ -11,21 +17,34 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class HttpServer {
-    /**
-     * Dirección donde se almacena toda la página, imágenes. (recursos estáticos).
-     */
     private static final File PUBLIC = new File("src/main/resources/public");
     private static Object controllerInstance = null;
     private static final Map<String, Method> routeHandlers = new HashMap<>();
+    private static final Map<Method, Object> methodToInstance = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
         if (args.length < 1) {
-            System.err.println("Usage: java -cp target/classes co.edu.escuelaing.reflexionlab.HttpServer <fully.qualified.ControllerClass>");
-            return;
+            for (String s : args) {
+                if (s.contains(".")) { // heuristic: looks like fqcn
+                    try {
+                        Class<?> c = Class.forName(s);
+                        loadRoutesFromClass(c);
+                    } catch (ClassNotFoundException e) {
+                        System.err.println("Explicit controller class not found: " + s);
+                    }
+                }
+            }
         }
 
-        String controllerClass = args[0];
-        loadRoutes(controllerClass);
+        List<String> discovered = discoverControllersOnClasspath();
+        for (String fqcn : discovered) {
+            try {
+                Class<?> c = Class.forName(fqcn);
+                loadRoutesFromClass(c);
+            } catch (Throwable ignore) {}
+        }
+
+        System.out.println("Total annotated routes registered: " + routeHandlers.size());
 
         if (!PUBLIC.exists()) PUBLIC.mkdirs();
         Scanner sc = new Scanner(System.in);
@@ -37,22 +56,42 @@ public class HttpServer {
             for (Map.Entry<String, Method> entry : routeHandlers.entrySet()) {
                 final String path = entry.getKey();
                 final Method m = entry.getValue();
-                // make accessible if necessary (but prefer public methods)
+                final Object instance = methodToInstance.get(m);
                 m.setAccessible(true);
 
                 router.get(path, (req, res) -> {
                     try {
-                        // invoke no-arg method (we already validated signature)
-                        String result = (String) m.invoke(controllerInstance);
-                        // default content type for controller strings
+                        // prepare args for the method based on @RequestParam
+                        Parameter[] params = m.getParameters();
+                        Object[] argsForInvoke = new Object[params.length];
+
+                        for (int i = 0; i < params.length; i++) {
+                            Parameter p = params[i];
+                            org.escuelaing.edu.co.annotations.RequestParam rp = p.getAnnotation(org.escuelaing.edu.co.annotations.RequestParam.class);
+                            String name = rp.value();
+                            String defaultValue = rp.defaultValue();
+                            boolean required = rp.required();
+
+                            // assume your Request object has getQueryParam(name, defaultValue)
+                            String value = req.getQueryParam(name, null);
+                            if (value == null) {
+                                if (!defaultValue.isEmpty()) value = defaultValue;
+                                else if (!required) value = null;
+                                else {
+                                    res.sendError(400, "No value for parameter " + name);
+                                    res.setContentType("text/plain; charset=utf-8");
+                                    return "Missing required query parameter: " + name;
+                                }
+                            }
+                            argsForInvoke[i] = value;
+                        }
+
+                        String result = (String) m.invoke(instance, argsForInvoke);
                         res.setContentType("text/html; charset=utf-8");
                         return result == null ? "" : result;
                     } catch (Throwable ex) {
                         ex.printStackTrace();
-                        try {
-                            res.sendError(500, "Not Valid");
-                            res.setContentType("text/plain; charset=utf-8");
-                        } catch (Throwable ignore) {}
+                        try { res.sendError(500, "Unexpected Error"); res.setContentType("text/plain; charset=utf-8"); } catch (Throwable ignore) {}
                         return "Internal Server Error";
                     }
                 });
@@ -178,6 +217,85 @@ public class HttpServer {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy HH:mm:ss", new Locale("es", "ES"));
         return now.format(formatter);
+    }
+
+    private static List<String> discoverControllersOnClasspath() {
+        List<String> found = new ArrayList<>();
+        String classpath = System.getProperty("java.class.path");
+        String[] entries = classpath.split(System.getProperty("path.separator"));
+        for (String entry : entries) {
+            File f = new File(entry);
+            if (f.exists() && f.isDirectory()) {
+                Path root = f.toPath();
+                try {
+                    Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                        @Override
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                            if (file.toString().endsWith(".class")) {
+                                // compute fqcn relative to root
+                                Path rel = root.relativize(file);
+                                String q = rel.toString().replace(File.separatorChar, '.');
+                                if (q.endsWith(".class")) q = q.substring(0, q.length() - 6);
+                                try {
+                                    Class<?> c = Class.forName(q);
+                                    if (c.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) {
+                                        found.add(q);
+                                    }
+                                } catch (Throwable ignore) {
+                                    // skip classes we cannot load
+                                }
+                            }
+                            return FileVisitResult.CONTINUE;
+                        }
+                    });
+                } catch (IOException e) {
+                }
+            }
+        }
+        return found;
+    }
+
+    private static void loadRoutesFromClass(Class<?> clazz) {
+        try {
+            if (!clazz.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) return;
+
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            // store controller instance so we can invoke later (keyed by class for simplicity)
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (!method.isAnnotationPresent(org.escuelaing.edu.co.annotations.GetMapping.class)) continue;
+
+                // Must return String
+                if (!method.getReturnType().equals(String.class)) {
+                    System.err.println("Skipping " + clazz.getName() + "." + method.getName() + ": return type must be String");
+                    continue;
+                }
+
+                boolean ok = true;
+                for (Parameter p : method.getParameters()) {
+                    if (!p.isAnnotationPresent(org.escuelaing.edu.co.annotations.RequestParam.class)) {
+                        ok = false;
+                        System.err.println("Skipping " + clazz.getName() + "." + method.getName() + ": all parameters must be annotated with @RequestParam");
+                        break;
+                    }
+
+                    if (!p.getType().equals(String.class)) {
+                        ok = false;
+                        System.err.println("Skipping " + clazz.getName() + "." + method.getName() + ": parameter types other than String are not supported yet");
+                        break;
+                    }
+                }
+                if (!ok) continue;
+
+                org.escuelaing.edu.co.annotations.GetMapping gm = method.getAnnotation(org.escuelaing.edu.co.annotations.GetMapping.class);
+                String path = gm.value();
+                routeHandlers.put(path, method);
+                methodToInstance.put(method, instance);
+                System.out.println("Registered route: GET " + path + " -> " + clazz.getName() + "." + method.getName());
+            }
+        } catch (Exception e) {
+            System.err.println("Error loading routes from class " + clazz.getName());
+            e.printStackTrace();
+        }
     }
 
 }

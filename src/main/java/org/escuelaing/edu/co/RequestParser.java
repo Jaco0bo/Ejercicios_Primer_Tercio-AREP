@@ -60,7 +60,6 @@ public class RequestParser {
             }
         }
 
-        // Build and return Request (your own Request class)
         return new Request(method, path, fullPath, queryParams, headers, bodyBytes);
     }
 
