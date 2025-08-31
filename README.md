@@ -126,7 +126,7 @@ You should see a page and responses similar to the screenshots below.
 ![POST example](screenshots/Imagen3.png)
 
 
-## Changes made in the `add: Work in class` commit (reflexion-lab3 branch)
+## Changes made in Class (Week 3) in the `add: Work in class` commit
 
 - Methods and examples have been added for testing the Java reflection API within the server.
 - Classes and objects can now be inspected and manipulated at runtime (e.g., getting methods and fields of a class, invoking methods, modifying private attributes).
