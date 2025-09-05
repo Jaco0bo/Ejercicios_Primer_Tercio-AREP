@@ -161,5 +161,4 @@ This project aims to enhance an existing web server, which currently supports HT
   
 - The framework will then look for static files in the specified directory, such as target/classes/webroot/public, making it easier for developers to organize and manage their application's static resources.
 
-**4. Additional Tasks:**
-- Build an example demonstrating how applications would be developed on your server.
+
