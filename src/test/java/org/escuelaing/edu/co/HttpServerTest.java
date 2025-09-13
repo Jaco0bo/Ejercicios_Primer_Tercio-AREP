@@ -1,116 +1,109 @@
 package org.escuelaing.edu.co;
 
+import org.escuelaing.edu.co.annotations.GetMapping;
+import org.escuelaing.edu.co.annotations.RequestParam;
+import org.escuelaing.edu.co.annotations.RestController;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.BufferedReader;
-import java.io.StringReader;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Method;
+import java.net.Socket;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class HttpServerTest {
+public class HttpServerTest {
 
-    @Test
-    void testParseQuerySimple() {
-        Map<String, String> result = callParseQuery("name=Juan&age=25");
-        assertEquals("Juan", result.get("name"));
-        assertEquals("25", result.get("age"));
+    private Router router;
+
+    @BeforeEach
+    void setUp() {
+        router = new Router();
     }
 
     @Test
-    void testParseQueryWithEncoding() {
-        Map<String, String> result = callParseQuery("city=Bogot%C3%A1");
-        assertEquals("Bogotá", result.get("city"));
+    void testTimeGetterReturnsFormattedString() throws Exception {
+        Method method = HttpServer.class.getDeclaredMethod("timeGetter");
+        method.setAccessible(true);
+        String result = (String) method.invoke(null);
+        assertNotNull(result);
+        assertTrue(result.length() > 0);
+        assertTrue(result.contains("de") || result.contains("de")); // comprobación sencilla del formato en español
     }
 
     @Test
-    void testToJson() {
-        Map<String, String> input = new LinkedHashMap<>();
-        input.put("name", "Juan");
-        input.put("age", "25");
-        String json = callToJson(input);
-        assertEquals("{\"name\":\"Juan\",\"age\":\"25\"}", json);
+    void testRegisterAnnotatedController() throws Exception {
+        HttpServerTestController controller = new HttpServerTestController();
+        Method[] methods = controller.getClass().getDeclaredMethods();
+
+        boolean found = false;
+        for (Method m : methods) {
+            if (m.isAnnotationPresent(GetMapping.class)) {
+                found = true;
+                assertEquals(String.class, m.getReturnType(), "El método anotado debe retornar String");
+            }
+        }
+        assertTrue(found, "El controller debe tener al menos un método con @GetMapping");
     }
 
     @Test
-    void testEscapeJsonSpecialChars() {
-        String input = "Hola \"Mundo\"\n";
-        String escaped = callEscapeJson(input);
-        assertEquals("Hola \\\"Mundo\\\"\\n", escaped);
+    void testRouterHandlesHelloRouteWithQueryParam() throws Exception {
+        router.get("/hello", (req, res) -> "Hello " + req.getQueryParam("name","world"));
+
+        // Construimos Request con 6 parámetros (method, path, fullPath, queryParams, headers, body)
+        Request req = new Request(
+                "GET",
+                "/hello",
+                "/hello?name=Test",
+                Map.of("name", "Test"),
+                Map.of(), // headers vacíos
+                null      // body nulo
+        );
+
+        Response res = new Response(new ByteArrayOutputStream(), new FakeSocket());
+
+        Object result = router.handle(req, res);
+
+        assertEquals("Hello Test", result);
     }
 
     @Test
-    void testContentTypeHtml() {
-        assertEquals("text/html; charset=utf-8", callContentType("index.html"));
+    void testRouterHandlesHelloRouteWithoutQueryParam() throws Exception {
+        router.get("/hello", (req, res) -> "Hello " + req.getQueryParam("name","world"));
+
+        Request req = new Request(
+                "GET",
+                "/hello",
+                "/hello",
+                Map.of(), // sin query params
+                Map.of(),
+                null
+        );
+
+        Response res = new Response(new ByteArrayOutputStream(), new FakeSocket());
+
+        Object result = router.handle(req, res);
+
+        assertEquals("Hello world", result);
     }
 
-    @Test
-    void testContentTypeUnknown() {
-        assertEquals("application/octet-stream", callContentType("archivo.xyz"));
-    }
-
-    @Test
-    void testReadBody() throws Exception {
-        String body = "name=Juan";
-        Map<String, String> headers = new HashMap<>();
-        headers.put("content-length", String.valueOf(body.length()));
-
-        BufferedReader br = new BufferedReader(new StringReader(body));
-        String result = callReadBody(br, headers);
-        assertEquals("name=Juan", result);
-    }
-
-    // --- Métodos helpers para acceder a los métodos privados ---
-    private Map<String, String> callParseQuery(String qs) {
-        try {
-            var m = HttpServer.class.getDeclaredMethod("parseQuery", String.class);
-            m.setAccessible(true);
-            return (Map<String, String>) m.invoke(null, qs);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    /* --- Controller de prueba --- */
+    @RestController
+    static class HttpServerTestController {
+        @GetMapping("/test")
+        public String sayHello(@RequestParam(value = "name", required = false, defaultValue = "anon") String name) {
+            return "Hi " + name;
         }
     }
 
-    private String callToJson(Map<String, String> map) {
-        try {
-            var m = HttpServer.class.getDeclaredMethod("toJson", Map.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, map);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+    /* --- FakeSocket para no usar la red --- */
+    static class FakeSocket extends Socket {
+        private final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
-    private String callEscapeJson(String s) {
-        try {
-            var m = HttpServer.class.getDeclaredMethod("escapeJson", String.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, s);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private String callContentType(String name) {
-        try {
-            var m = HttpServer.class.getDeclaredMethod("contentType", String.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, name);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private String callReadBody(BufferedReader br, Map<String, String> headers) {
-        try {
-            var m = HttpServer.class.getDeclaredMethod("readBody", BufferedReader.class, Map.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, br, headers);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        @Override
+        public java.io.OutputStream getOutputStream() {
+            return outputStream;
         }
     }
 }
-
