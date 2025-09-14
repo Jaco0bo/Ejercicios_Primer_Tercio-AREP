@@ -216,6 +216,9 @@ mvn test
 
 - The server must accept args[0] (port) so that tests don't block waiting for console input.
 
+## Video with the deployments working:
+
+
 
 ## License
 
