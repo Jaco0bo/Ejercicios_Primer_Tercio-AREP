@@ -218,7 +218,17 @@ mvn test
 
 ## Video with the deployments working:
 
+> **The ec2 instance was configured before this video was recorded.**
 
+The following commands were used for the setup:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y docker
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker ec2-user
+```
 
 ## License
 
