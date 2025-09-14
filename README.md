@@ -153,7 +153,7 @@ curl "http://localhost:9090/"
 
 **Turn off gracefully: Ctrl + C**
 
-
+![](screenshots/docker4.png)
 
 ---
 
@@ -174,16 +174,26 @@ CMD ["java", "-jar", "Taller1AREP-1.0-SNAPSHOT-jar-with-dependencies.jar", "8080
 docker build -t jac0obo8/arep-virtualizacion:2.0 .
 ```
 
+![](screenshots/docker5.png)
+
 **Run the container by mapping the port:**
 ```bash
 docker run -d --name taller1 -p 9090:8080 jac0obo8/arep-virtualizacion:2.0
 ```
 
+![](screenshots/docker6.png)
+
+![](screenshots/docker7.png)
+
 ---
 
 ## Reference images
 
-Pendiente
+```bash
+docker push jac0obo8/arep-virtualizacion:2.0 
+```
+
+
 
 ## Tests (JUnit)
 
