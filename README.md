@@ -230,6 +230,9 @@ sudo systemctl enable docker
 sudo usermod -aG docker ec2-user
 ```
 
+The demo video is located at `demo/demo-despliegues.zip`.  
+It is compressed as a zip file because the original video was larger than 100MB.
+
 ## License
 
 **MIT** 
