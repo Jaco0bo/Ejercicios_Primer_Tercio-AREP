@@ -193,7 +193,7 @@ docker run -d --name taller1 -p 9090:8080 jac0obo8/arep-virtualizacion:2.0
 docker push jac0obo8/arep-virtualizacion:2.0 
 ```
 
-
+![](screenshots/docker8.png)
 
 ## Tests (JUnit)
 
