@@ -151,6 +151,10 @@ curl "http://localhost:9090/"
 
 ![](screenshots/docker3.png)
 
+**Turn off gracefully: Ctrl + C**
+
+
+
 ---
 
 ## Deployment in Docker
