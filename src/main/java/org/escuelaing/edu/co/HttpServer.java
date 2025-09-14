@@ -4,28 +4,28 @@ import java.io.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
-import java.nio.file.Path;
-import java.nio.file.Files;
-import java.nio.file.FileVisitResult;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.net.*;
 import org.escuelaing.edu.co.annotations.*;
+import org.reflections.Reflections;
 import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 
 public class HttpServer {
-    private static final File PUBLIC = new File("src/main/resources/public");
+    private static final File PUBLIC = new File("public");
     private static Object controllerInstance = null;
-    private static final Map<String, Method> routeHandlers = new HashMap<>();
-    private static final Map<Method, Object> methodToInstance = new HashMap<>();
+    private static final Map<String, Method> routeHandlers = new ConcurrentHashMap<>();
+    private static final Map<Method, Object> methodToInstance = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws IOException {
         if (args.length < 1) {
             for (String s : args) {
-                if (s.contains(".")) { // heuristic: looks like fqcn
+                if (s.contains(".")) {
                     try {
                         Class<?> c = Class.forName(s);
                         loadRoutesFromClass(c);
@@ -44,76 +44,94 @@ public class HttpServer {
             } catch (Throwable ignore) {}
         }
 
-        System.out.println("Total annotated routes registered: " + routeHandlers.size());
+        System.out.println("Total de rutas registradas: " + routeHandlers.size());
 
         if (!PUBLIC.exists()) PUBLIC.mkdirs();
-        Scanner sc = new Scanner(System.in);
-        System.out.print("Por favor ingrese puerto: ");
-        int puerto = sc.nextInt();
-        try (ServerSocket server = new ServerSocket(puerto)) { // Socket del servidor
-            System.out.println("Listening on http://localhost:"+puerto+"/");
-            Router router = new Router();
-            for (Map.Entry<String, Method> entry : routeHandlers.entrySet()) {
-                final String path = entry.getKey();
-                final Method m = entry.getValue();
-                final Object instance = methodToInstance.get(m);
-                m.setAccessible(true);
 
-                router.get(path, (req, res) -> {
-                    try {
-                        // prepare args for the method based on @RequestParam
-                        Parameter[] params = m.getParameters();
-                        Object[] argsForInvoke = new Object[params.length];
+        int puerto;
 
-                        for (int i = 0; i < params.length; i++) {
-                            Parameter p = params[i];
-                            org.escuelaing.edu.co.annotations.RequestParam rp = p.getAnnotation(org.escuelaing.edu.co.annotations.RequestParam.class);
-                            String name = rp.value();
-                            String defaultValue = rp.defaultValue();
-                            boolean required = rp.required();
+        if (args.length > 0) {
+            try {
+                puerto = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                System.err.println("Puerto inválido, usando 8080 por defecto");
+                puerto = 8080;
+            }
+        } else {
+            Scanner sc = new Scanner(System.in);
+            System.out.print("Por favor ingrese puerto: ");
+            puerto = sc.nextInt();
+        }
 
-                            // assume your Request object has getQueryParam(name, defaultValue)
-                            String value = req.getQueryParam(name, null);
-                            if (value == null) {
-                                if (!defaultValue.isEmpty()) value = defaultValue;
-                                else if (!required) value = null;
-                                else {
-                                    res.sendError(400, "No value for parameter " + name);
-                                    res.setContentType("text/plain; charset=utf-8");
-                                    return "Missing required query parameter: " + name;
-                                }
+        Router router = new Router();
+        for (Map.Entry<String, Method> entry : routeHandlers.entrySet()) {
+            final String path = entry.getKey();
+            final Method m = entry.getValue();
+            final Object instance = methodToInstance.get(m);
+            m.setAccessible(true);
+
+            router.get(path, (req, res) -> {
+                try {
+                    // prepare args for the method based on @RequestParam
+                    Parameter[] params = m.getParameters();
+                    Object[] argsForInvoke = new Object[params.length];
+
+                    for (int i = 0; i < params.length; i++) {
+                        Parameter p = params[i];
+                        org.escuelaing.edu.co.annotations.RequestParam rp = p.getAnnotation(org.escuelaing.edu.co.annotations.RequestParam.class);
+                        String name = rp.value();
+                        String defaultValue = rp.defaultValue();
+                        boolean required = rp.required();
+
+                        // assume your Request object has getQueryParam(name, defaultValue)
+                        String value = req.getQueryParam(name, null);
+                        if (value == null) {
+                            if (!defaultValue.isEmpty()) value = defaultValue;
+                            else if (!required) value = null;
+                            else {
+                                res.sendError(400, "No value for parameter " + name);
+                                res.setContentType("text/plain; charset=utf-8");
+                                return "Missing required query parameter: " + name;
                             }
-                            argsForInvoke[i] = value;
                         }
-
-                        String result = (String) m.invoke(instance, argsForInvoke);
-                        res.setContentType("text/html; charset=utf-8");
-                        return result == null ? "" : result;
-                    } catch (Throwable ex) {
-                        ex.printStackTrace();
-                        try { res.sendError(500, "Unexpected Error"); res.setContentType("text/plain; charset=utf-8"); } catch (Throwable ignore) {}
-                        return "Internal Server Error";
+                        argsForInvoke[i] = value;
                     }
-                });
 
-                System.out.println("Mounted annotated route: GET " + path + " -> " + m.getName());
-            }
-            router.staticFiles("src/main/resources/public");
-            router.get("/hello", (req, res) -> "Hello " + req.getQueryParam("name","world"));
-            router.post("/api/echo", (req, res) -> req.bodyAsString());
-            router.get("/api/time", (req, res) -> {
-                res.setContentType("application/json");
-                return "{ \"time\": \"" + timeGetter() + "\" }";
-            });
-
-
-            while (true) {
-                try (Socket client = server.accept()) { // Socket del cliente
-                    handle(client, router); // Aquí se maneja la conexión del cliente
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    String result = (String) m.invoke(instance, argsForInvoke);
+                    res.setContentType("text/html; charset=utf-8");
+                    return result == null ? "" : result;
+                } catch (Throwable ex) {
+                    ex.printStackTrace();
+                    try {
+                        res.sendError(500, "Unexpected Error");
+                        res.setContentType("text/plain; charset=utf-8");
+                    } catch (Throwable ignore) {
+                    }
+                    return "Internal Server Error";
                 }
-            }
+            });
+            System.out.println("Mounted annotated route: GET " + path + " -> " + m.getName());
+        }
+        router.staticFiles("src/main/resources/public");
+        router.get("/hello", (req, res) -> "Hello " + req.getQueryParam("name", "world"));
+        router.post("/api/echo", (req, res) -> req.bodyAsString());
+        router.get("/api/time", (req, res) -> {
+            res.setContentType("application/json");
+            return "{ \"time\": \"" + timeGetter() + "\" }";
+        });
+
+        ServerController controller = new ServerController(router);
+        controller.start(puerto);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutdown hook invoked, stopping server...");
+            controller.stop();
+        }));
+
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            // si el hilo principal es interrumpido, gg server
+            controller.stop();
         }
     }
 
@@ -163,10 +181,14 @@ public class HttpServer {
         }
     }
 
-    private static void handle(Socket client, Router router) {
+    public static void handle(Socket client, Router router) {
         try {
             Request req = RequestParser.parse(client, 5000);
             if (req == null) {
+                try {
+                    Response res = new Response(client.getOutputStream(), client);
+                    res.sendError(408, "Request Timeout");
+                } catch (IOException ignore) {}
                 return;
             }
 
@@ -220,39 +242,72 @@ public class HttpServer {
     }
 
     private static List<String> discoverControllersOnClasspath() {
-        List<String> found = new ArrayList<>();
-        String classpath = System.getProperty("java.class.path");
-        String[] entries = classpath.split(System.getProperty("path.separator"));
-        for (String entry : entries) {
-            File f = new File(entry);
-            if (f.exists() && f.isDirectory()) {
-                Path root = f.toPath();
+        Reflections reflections = new Reflections("org.escuelaing.edu.co");
+        return reflections.getTypesAnnotatedWith(RestController.class)
+                .stream()
+                .map(Class::getName)
+                .collect(Collectors.toList());
+    }
+
+    private static void scanDirectory(File directory, String packageName, List<String> found) {
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isDirectory()) {
+                scanDirectory(file, packageName + "." + file.getName(), found);
+            } else if (file.getName().endsWith(".class")) {
+                String className = packageName + '.' + file.getName().substring(0, file.getName().length() - 6);
                 try {
-                    Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                        @Override
-                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                            if (file.toString().endsWith(".class")) {
-                                // compute fqcn relative to root
-                                Path rel = root.relativize(file);
-                                String q = rel.toString().replace(File.separatorChar, '.');
-                                if (q.endsWith(".class")) q = q.substring(0, q.length() - 6);
-                                try {
-                                    Class<?> c = Class.forName(q);
-                                    if (c.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) {
-                                        found.add(q);
-                                    }
-                                } catch (Throwable ignore) {
-                                    // skip classes we cannot load
-                                }
-                            }
-                            return FileVisitResult.CONTINUE;
+                    Class<?> c = Class.forName(className);
+                    if (c.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) {
+                        found.add(c.getName());
+                    }
+                } catch (Throwable ignore) {}
+            }
+        }
+    }
+
+    private static void scanJar(URL resource, String path, List<String> found) throws IOException {
+        String jarPath = resource.getPath().substring(resource.getPath().indexOf(":") + 1, resource.getPath().indexOf("!"));
+        try (JarFile jarFile = new JarFile(jarPath)) {
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                if (entry.getName().startsWith(path) && entry.getName().endsWith(".class")) {
+                    String className = entry.getName().replace('/', '.').replace(".class", "");
+                    try {
+                        Class<?> c = Class.forName(className);
+                        if (c.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) {
+                            found.add(c.getName());
                         }
-                    });
-                } catch (IOException e) {
+                    } catch (Throwable ignore) {}
                 }
             }
         }
-        return found;
+    }
+
+    private static void findClasses(File directory, String packageName, List<String> found) {
+        if (!directory.exists()) {
+            return;
+        }
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                findClasses(file, packageName + "." + file.getName(), found);
+            } else if (file.getName().endsWith(".class")) {
+                String className = packageName + '.' + file.getName().substring(0, file.getName().length() - 6);
+                try {
+                    Class<?> c = Class.forName(className);
+                    if (c.isAnnotationPresent(org.escuelaing.edu.co.annotations.RestController.class)) {
+                        found.add(c.getName());
+                    }
+                } catch (Throwable e) {
+                }
+            }
+        }
     }
 
     private static void loadRoutesFromClass(Class<?> clazz) {

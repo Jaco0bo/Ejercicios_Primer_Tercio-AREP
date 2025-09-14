@@ -5,6 +5,7 @@ public class HelloController {
 
     @GetMapping("/saludo")
     public String saludo() {
+        System.out.println("Handling request for /saludo...");
         return "<h1>¡Hola desde el controlador!</h1>";
     }
 
