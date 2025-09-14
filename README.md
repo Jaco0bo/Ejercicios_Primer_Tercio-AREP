@@ -45,55 +45,56 @@ Static files handler (filesystem → project resources → classpath)
 
 ### Core Components
 
-- **HttpServer**
+**HttpServer**
 - Entry point (`main`), loads routes, and mounts the `Router`.
 - Defines public folders (`PUBLIC`), registers annotated handlers and fixed routes (`/hello`, `/api/echo`, `/api/time`).
 - Starts the `ServerController` with the `ServerSocket` and thread pool.
 
-- **ServerController**
+**ServerController**
 - Encapsulates `ServerSocket`, `ThreadPoolExecutor`, and the `accept()` loop.
 - Provides `start(port)` and `stop()` methods for graceful shutdown.
 
-- **Router**
+**Router**
 - Maps routes to handlers (`GET`, `POST`).
 - `get(path, handler)`, `post(path, handler)`, and `staticFiles(baseDir)` methods.
 
-- **RequestParser**
+**RequestParser**
 - Reads raw HTTP from the socket, parses request lines, headers, and body.
 - Handles exceptions and returns a `Request` object.
 
-- **Request / Response**
+**Request / Response**
 - `Request` stores methods, routes, parameters, headers, and bodies.
 - `Response` sends status, headers, and bodies to the client.
 
-- **Annotated Controllers**
+**Annotated Controllers**
 - `@RestController` (class), `@GetMapping` (method), `@RequestParam` (parameter).
-- Example: `GreetingController` (uses `AtomicLong`), `HelloController`.
+  
+  Example: `GreetingController` (uses `AtomicLong`), `HelloController`.
 
 ---
 
 ## Class Design (High Level)
 
-- **org.escuelaing.edu.co.HttpServer**
+**org.escuelaing.edu.co.HttpServer**
 - `main(String[] args)` — starts, discovers controllers, mounts `Router`, creates `ServerController`.
 - `loadRoutesFromClass(Class<?>)` — validates and registers annotated methods.
 - `handle(Socket client, Router router)` — request → response flow.
 
-- **org.escuelaing.edu.co.ServerController**
+**org.escuelaing.edu.co.ServerController**
 - `start(int port)`
 - `stop()`
 - Constructs `ThreadPoolExecutor`, thread acceptor.
 
-- **org.escuelaing.edu.co.Router** 
+**org.escuelaing.edu.co.Router** 
 - `get(String path, Handler handler)` 
 - `post(String path, Handler handler)` 
 - `handle(Request req, Response res)` — searches for route and executes handler. 
-- (Optional) `staticFiles(String baseDir)`.
 
-- **org.escuelaing.edu.co.RequestParser** 
+
+**org.escuelaing.edu.co.RequestParser** 
 - `static Request parse(Socket client, int timeoutMillis)`
 
-- **org.escuelaing.edu.co.annotations** 
+**org.escuelaing.edu.co.annotations** 
 - `@RestController`, `@GetMapping`, `@RequestParam`
 
 ---
@@ -139,6 +140,9 @@ java -cp "target/classes;target/dependency/*" org.escuelaing.edu.co.HttpServer 9
 
 **Quick test**
 
+
+
+
 ```bash
 curl "http://localhost:9090/greeting?name=Andres"
 curl "http://localhost:9090/"
@@ -182,17 +186,19 @@ Pendiente
 mvn test
 ```
 
+**Tests include:**
+
+  - ```HttpServerTest```: unit tests for utilities and routes.
+
+  - ```ConcurrencyTest```: launches N concurrent requests with ExecutorService and verifies responses.
+
+
 **Note on Integration/Concurrency Tests**
 
-- Some tests start the server within @BeforeAll (by calling HttpServer.main(new String[]{port})) and stop it within @AfterAll.
+- Some tests start the server within ```@BeforeAll``` (by calling ```HttpServer.main(new String[]{port})```) and stop it within ```@AfterAll```.
 
 - The server must accept args[0] (port) so that tests don't block waiting for console input.
 
-- Tests include:
-
-  - HttpServerTest — unit tests for utilities and routes.
-
-  - ConcurrencyTest — launches N concurrent requests with ExecutorService and verifies responses.
 
 ## License
 
