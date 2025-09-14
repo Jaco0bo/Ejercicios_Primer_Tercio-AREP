@@ -140,13 +140,16 @@ java -cp "target/classes;target/dependency/*" org.escuelaing.edu.co.HttpServer 9
 
 **Quick test**
 
+![](screenshots/docker1.png)
 
-
+![](screenshots/docker2.png)
 
 ```bash
 curl "http://localhost:9090/greeting?name=Andres"
 curl "http://localhost:9090/"
 ```
+
+![](screenshots/docker3.png)
 
 ---
 
