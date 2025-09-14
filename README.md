@@ -1,346 +1,201 @@
-# Web Framework Development for REST Services and Static File Management
+# Workshop on modularization with virtualization and introduction to Docker
 
-This repository contains a minimal Java web framework built on top of raw Java Socket I/O.
-It began as a socket-based HTTP server for learning purposes and was extended into a small framework that supports:
+## Andrés Jacobo Sepúlveda Sánchez
 
-- registering REST handlers with ```get(...)``` using lambdas.
+**For this assignment, you must build a web application and deploy it to AWS using EC2 and Docker. For deployment, you must use their framework (DO NOT USE SPRING). You must enhance your framework to make it concurrent and able to shut down gracefully.**
 
-- extracting query parameters from requests
+## Project Summary
 
-- serving static files from a configurable folder.
+This project implements an HTTP server in Java with the following features:
 
-## Getting Started
-
-Before you run this project, make sure you have the following installed:
-
-### Prerequisites
-
-- **Java JDK 8+**  
-  Verify installation:
-  ```bash
-  java -version
-  ```
-  Example output:
-    ```  
-    openjdk version "17.0.9" 2023-10-17
-    ```
-- **Maven 3.6+ (to build and run the project)**
-    Verify installation:
-    ```
-    mvn -v
-    ```
-    Example output:
-    ```
-    Apache Maven 3.9.6
-    ```
-- An IDE (optional): IntelliJ IDEA is recommended for easier development and debugging.
-    
-### Installing
-
-A step-by-step series of examples that tell you how to get a development environment running.
-
-**Step 1 - Clone or download the repository**
-```
-git clone https://github.com/Jaco0bo/ejercicio1AREP.git
-cd java-socket-http-server
-```
-
-**Step 2 - Build the project with Maven**
-```
-mvn clean package
-```
-
-This will download dependencies and generate compiled classes under the target directory.
-
-**Step 3 - Run the server**
-
-You can run the server from the terminal:
-```
-mvn exec:java -Dexec.mainClass="org.escuelaing.edu.co.HttpServer"
-```
-
-Expected output:
-```bash
-Listening on http://localhost:36000/
-```
-
-## Running the tests
-
-This project includes a set of automated tests to ensure that the socket server and client work as expected. The tests cover both end-to-end functionality and coding style.
-
-### End-to-end tests
-
-End-to-end tests simulate a real interaction between the client and the server. These tests ensure that when a client sends a message to the server, the server correctly echoes the message back.
-
-Example:
-
-From the project, run:
-```bash
-HttpServerTest.java class
-```
-If successful, you should see output confirming that the test passed and confirmating the correct operation of the class.
-
-## Deployment
-
-Because this is an academic exercise, you can´t deploy the Http server to a live environment to allow multiple clients to connect :(.
-
-## Built With
-
-This project was built with the following tools and libraries:
-
-- **Java** — Core programming language used to implement the socket HTTP server.  
-- **Maven** — Build tool and dependency management (`pom.xml` included).  
-- **JUnit 5** — Unit testing framework used for automated tests.  
-- **IntelliJ IDEA** — Recommended IDE for development and debugging (optional).
-
-> Note: This project does **not** use Spark, Spring Boot, or other web frameworks — it is intentionally minimal and socket-based for learning purposes.
+- **Annotated controllers** (@RestController, @GetMapping, @RequestParam) discovered via reflection.
+- **Dynamic routing** to Java methods using a Router.
+- **Static file handling** (searches in ./public, src/main/resources/public, and within the JAR).
+- **Safe concurrency** using ThreadPoolExecutor and ServerController for controlled startup and shutdown.
+- **Automated testing** with JUnit 5, including concurrency tests that start/stop the server from within the tests.
+- **Packaged in a fat JAR** (jar-with-dependencies) and deployed via Docker.
 
 ---
 
-## Demo
+## Prerequisites
 
+- Java 21 (JDK)
+
+- Maven 3.8+ (or latest)
+
+- Docker (for container builds)
+
+Optional: curl, ab (ApacheBench) or other load tools for testing concurrency
+
+## Architecture and General Design
+
+```
+Client (browser/curl) 
+  ↓ HTTP
+ServerController (accepts sockets) 
+  ↓ delegate
+ThreadPoolExecutor (worker pool) 
+  ↓ each worker
+HttpServer.handle(Socket, Router) ← RequestParser → Request 
+                    Router.handle(req, res) → handler 
+                                  ↑ 
+                            Controller methods (invoked by reflection)
+Static files handler (filesystem → project resources → classpath)
+```
+
+### Core Components
+
+- **HttpServer**
+- Entry point (`main`), loads routes, and mounts the `Router`.
+- Defines public folders (`PUBLIC`), registers annotated handlers and fixed routes (`/hello`, `/api/echo`, `/api/time`).
+- Starts the `ServerController` with the `ServerSocket` and thread pool.
+
+- **ServerController**
+- Encapsulates `ServerSocket`, `ThreadPoolExecutor`, and the `accept()` loop.
+- Provides `start(port)` and `stop()` methods for graceful shutdown.
+
+- **Router**
+- Maps routes to handlers (`GET`, `POST`).
+- `get(path, handler)`, `post(path, handler)`, and `staticFiles(baseDir)` methods.
+
+- **RequestParser**
+- Reads raw HTTP from the socket, parses request lines, headers, and body.
+- Handles exceptions and returns a `Request` object.
+
+- **Request / Response**
+- `Request` stores methods, routes, parameters, headers, and bodies.
+- `Response` sends status, headers, and bodies to the client.
+
+- **Annotated Controllers**
+- `@RestController` (class), `@GetMapping` (method), `@RequestParam` (parameter).
+- Example: `GreetingController` (uses `AtomicLong`), `HelloController`.
+
+---
+
+## Class Design (High Level)
+
+- **org.escuelaing.edu.co.HttpServer**
+- `main(String[] args)` — starts, discovers controllers, mounts `Router`, creates `ServerController`.
+- `loadRoutesFromClass(Class<?>)` — validates and registers annotated methods.
+- `handle(Socket client, Router router)` — request → response flow.
+
+- **org.escuelaing.edu.co.ServerController**
+- `start(int port)`
+- `stop()`
+- Constructs `ThreadPoolExecutor`, thread acceptor.
+
+- **org.escuelaing.edu.co.Router** 
+- `get(String path, Handler handler)` 
+- `post(String path, Handler handler)` 
+- `handle(Request req, Response res)` — searches for route and executes handler. 
+- (Optional) `staticFiles(String baseDir)`.
+
+- **org.escuelaing.edu.co.RequestParser** 
+- `static Request parse(Socket client, int timeoutMillis)`
+
+- **org.escuelaing.edu.co.annotations** 
+- `@RestController`, `@GetMapping`, `@RequestParam`
+
+---
+
+## How to Build and Run (Local)
+
+**Requirements:** Java 21, Maven 3.8+, Docker.
+
+1. **Build with Maven:**
 ```bash
-# GET with query parameter
-curl -i 'http://localhost:36000/App/hello?name=Pedro'
-
-# GET returning a numeric (or plain) value
-curl -i 'http://localhost:36000/App/pi'
-
-# POST echo example (form-urlencoded)
-curl -i -X POST -H "Content-Type: application/x-www-form-urlencoded" -d 'a=1&b=2' 'http://localhost:36000/api/echo'
-
-# Static file (index)
-curl -i 'http://localhost:36000/index.html'
-
-# 404 / Not found
-curl -i 'http://localhost:36000/nonexistent'
-
-# Directory traversal attempt (should be blocked)
-curl -i 'http://localhost:36000/../pom.xml'
-```
-
-![example1](screenshots/example1.png)
-
-![example2](screenshots/example2.png)
-
-![example3](screenshots/example3.png)
-
-
-if you are using Windows put curl.exe to avoid the ```Invoque-WebRequest```
-
-## Architecture & main components
-
-### This framework is intentionally small and composed of a few focused classes:
-
-- ```HttpServer```
-
-  - Entry point and request loop (synchronous model).
-
-  - Instantiates a single ```Router```, registers routes and static folder, accepts sockets and delegates handling.
-
-- ```RequestParser```
-
-  - Parses raw HTTP request lines, headers and body into a ```Request``` object.
-
-  - Respects ```Content-Length``` and decodes query string into a ```Map<String,String>```.
-
-- ```Request```
-
-  - POJO representing the incoming request: ```method```, ```path```, ```fullPath```, ```queryParams```, ```headers```, ```body (byte[])```.
-
-  - Helpers: ```getQueryParam(name, default)```, ```bodyAsString()```, etc.
-
-- ```Response```
-
-  - Wrapper over the socket ```OutputStream```. Helpers include: ```status(int)```, ```header(String,String)```, ```send(String|byte[])```,   ```sendError(int,String)```, ```isSent()```
-
-  - Responsible for formatting the HTTP response (status line, headers, Content-Length, body) and flushing.
-
-- ```Router```
-
-  - Stores routes keyed by ```METHOD:normalizedPath``` (e.g. ```GET:/App/hello```).
-
-  - Registration helpers: ```get(path, handler)```, ```post(path, handler)```, ```put(...)```, ```delete(...)```.
-
-  - ```staticFiles(directory)``` sets the static root.
-
-  - ```handle(Request, Response)``` dispatches to handler, falls back to static files if configured, otherwise returns 404.
-
-## How to register routes & static folder
-
-Register routes once at server startup (before the accept loop):
-
-```java
-Router router = new Router();
-router.staticFiles("src/main/resources/public");
-
-// Register GET handlers
-router.get("/App/hello", (req, res) -> "Hello " + req.getQueryParam("name", "world"));
-router.get("/App/pi", (req, res) -> String.valueOf(Math.PI));
-
-// Register POST handler
-router.post("/api/echo", (req, res) -> req.bodyAsString());
-```
-
-**Handler contract**
-
-- Handlers are ```BiFunction<Request, Response, Object>```. They receive ```req``` and ```res``` and can:
-
-  - Return a ```String``` or ```byte[]``` (if the handler returns a value and ```res.isSent()``` is false, the server will convert and send it)
-
-  - Write directly to the response using ```res.header(...)``` and ```res.send(...)``` for full control (in this case the router will not send an extra body).
-
-**Static files**
-
-- Call ```router.staticFiles("path/to/webroot")``` to set the directory used for static file serving.
-
-- If a route is not found, the router will attempt to serve a file from that folder (with directory-traversal protection).
-
-## How requests are handled (flow)
-
-1. ```HttpServer``` accepts a socket connection.
-
-2. ```RequestParser.parse(socket, timeout)``` parses request-line, headers and body → returns ```Request```.
-
-3. ```HttpServer``` creates ```Response``` wrapping the socket ```OutputStream```.
-
-4. ```HttpServer``` calls ```router.handle(request, response)```.
-
-5. ```Router:```
-
-- looks up ```METHOD:normalizedPath```,
-
-- if a handler exists, invokes it
-
-- else tries to serve a static file (if configured)
-
-- else sends 404.
-
-6. If handler returned an ```Object``` and ```res.isSent()``` is false, ```HttpServer``` or the router will convert the result (```String``` → ```text/plain```, ```byte[]``` → raw body) and send it.
-
-## Recent Changes (Week 4)
-
-The latest commit (`add: code to week 4 work`) adds functionality for the week 4 reflection exercises, extending the framework's ability to work with reflections and improving the code structure.
-
-## Getting Started
-
-Make sure you have the following installed:
-
-### Prerequisites
-
-- **Java JDK 8+**
-Check with:
-```bash
-java -version
-```
-- **Maven 3.6+**
-Check with:
-```
-mvn -v
-```
-- Recommended IDE: IntelliJ IDEA.
-
-### Installation
-
-1. Clone the repository:
-```
-git clone https://github.com/Jaco0bo/Ejercicios_Primer_Tercio-AREP.git
-cd Ejercicios_Primer_Tercio-AREP
-```
-2. Compile the project:
-```
 mvn clean package
 ```
-3. Run the server:
-```
-mvn exec:java -Dexec.mainClass="org.escuelaing.edu.co.HttpServer"
-```
+This generates the JAR in `target/` (using `maven-assembly-plugin` you will have `*-jar-with-dependencies.jar`).
 
-## Tests
-
-The project includes automated tests to verify the operation of the server and socket client.
-
-Test execution example (Java):
+2. **Run with Maven (development):**
 ```bash
-HttpServerTest.java
+mvn clean compile exec:java -Dexec.args="9090"
+```
+> Note: The plugin must have `<classpathScope>runtime</classpathScope>` and `<fork>true</fork>` to include `target/classes`.
+
+3. **Run the JAR:**
+```bash
+java -jar target/Taller1AREP-1.0-SNAPSHOT-jar-with-dependencies.jar 9090
+```
+Or, if you don't have the fat JAR:
+```bash
+java -cp "target/classes;target/dependency/*" org.escuelaing.edu.co.HttpServer 9090
 ```
 
-## Demo
+## Endpoints (examples)
+
+```GET /``` → ```index.html``` (static)
+
+```GET /greeting?name=Alice``` → annotated controller returns ```Hello, Alice! (id=N)```
+
+```GET /saludo``` → returns HTML greeting
+
+```POST /api/echo``` → returns request body as-is
+
+```GET /api/time``` → returns JSON ```{ "time": "..." }```
+
+```GET /api/otro``` → returns  HTML otro
+
+**Quick test**
 
 ```bash
-# GET with query parameter
-curl -i 'http://localhost:36000/App/hello?name=Pedro'
-
-# GET that returns a numeric value
-curl -i 'http://localhost:36000/App/pi'
-
-# POST echo (form-urlencoded)
-curl -i -X ​​POST -H "Content-Type: application/x-www-form-urlencoded" -d 'a=1&b=2' 'http://localhost:36000/api/echo'
-
-# Static file
-curl -i 'http://localhost:36000/index.html'
-
-#404/Not found
-curl -i 'http://localhost:36000/nonexistent'
-
-# Attempted directory traversal (should be blocked)
-curl -i 'http://localhost:36000/../pom.xml'
+curl "http://localhost:9090/greeting?name=Andres"
+curl "http://localhost:9090/"
 ```
 
-### Example:
+---
 
-![lab3-1](screenshots/lab3-1.png)
+## Deployment in Docker
 
-![lab3](screenshots/lab3.png)
+**Dockerfile example:**
 
-![lab3-2](screenshots/lab3-2.png)
-
-![lab3-3](screenshots/lab3-3.png)
-
-![lab3-4](screenshots/lab3-4.png)
-
-If you're using Windows, run `curl.exe` to avoid using `Invoke-WebRequest`.
-
-## Architecture & Core Components
-
-The framework is composed of core classes such as:
-
-- `HttpServer`: Entry point and request loop.
-- `RequestParser`: Parses raw HTTP requests.
-- `Request`: Represents the HTTP request.
-- `Response`: Wraps the socket's OutputStream and helps format the response.
-- `Router`: Stores routes and manages static files.
-
-### Route Registration and Static Folder
-
-```java
-Router router = new Router();
-router.staticFiles("src/main/resources/public");
-
-// Register GET handlers
-router.get("/App/hello", (req, res) -> "Hello " + req.getQueryParam("name", "world"));
-router.get("/App/pi", (req, res) -> String.valueOf(Math.PI));
-
-// POST handler registration
-router.post("/api/echo", (req, res) -> req.bodyAsString());
+```Dockerfile
+FROM openjdk:21
+WORKDIR /app
+COPY src/main/resources/public ./public
+COPY target/Taller1AREP-1.0-SNAPSHOT-jar-with-dependencies.jar .
+CMD ["java", "-jar", "Taller1AREP-1.0-SNAPSHOT-jar-with-dependencies.jar", "8080"]
 ```
 
-## Contributing
+**Build the image:**
+```bash
+docker build -t jac0obo8/arep-virtualizacion:2.0 .
+```
 
-If you would like to contribute, please:
+**Run the container by mapping the port:**
+```bash
+docker run -d --name taller1 -p 9090:8080 jac0obo8/arep-virtualizacion:2.0
+```
 
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/my-change`
-3. Run the tests locally: `mvn test`
-4. Commit your changes: `git commit -m "Add my feature"`
-5. Push to the branch: `git push origin feature/my-change`
-6. Open a Pull Request describing the change and why it is useful.
+---
 
-## Authors and Acknowledgments
+## Reference images
 
-- **Jacobo Sepulveda** — Initial work (author).  
-  - GitHub: `https://github.com/Jaco0bo`
+Pendiente
 
-Acknowledgments:
-- Networking and HTTP internals tutorials and reference materials.
-- Course and teacher guidance used to shape this exercise.
+## Tests (JUnit)
+
+**Running Tests**
+
+```bash
+mvn test
+```
+
+**Note on Integration/Concurrency Tests**
+
+- Some tests start the server within @BeforeAll (by calling HttpServer.main(new String[]{port})) and stop it within @AfterAll.
+
+- The server must accept args[0] (port) so that tests don't block waiting for console input.
+
+- Tests include:
+
+  - HttpServerTest — unit tests for utilities and routes.
+
+  - ConcurrencyTest — launches N concurrent requests with ExecutorService and verifies responses.
+
+## License
+
+**MIT** 
+
+
